@@ -1,0 +1,99 @@
+/* Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+}
+
+/* Page background */
+body {
+    min-height: 100vh;
+    background: #f2f2f2;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Main container */
+.top-container {
+    background: white;
+    width: 400px;
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+/* Title */
+h1 {
+    color: #ff0000;
+    margin-bottom: 20px;
+    font-size: 25px;
+}
+
+h1 i {
+    margin-right: 10px;
+}
+
+/* Subtitle */
+h4 {
+    color: #555;
+    margin-bottom: 15px;
+}
+
+/* Input */
+input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    font-size: 16px;
+}
+
+/* Buttons */
+button {
+    width: 100%;
+    padding: 12px;
+    background: #ff0000;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+button:hover {
+    background: #cc0000;
+}
+
+/* Result container */
+.bottom-container {
+    margin-top: 20px;
+}
+
+/* Success message */
+.success {
+    background: #e8ffe8;
+    padding: 15px;
+    border-radius: 10px;
+    color: green;
+}
+
+#download {
+    margin-top: 10px;
+    background: #28a745;
+}
+
+#download:hover {
+    background: #218838;
+}
+
+/* Error message */
+.errors {
+    background: #ffe8e8;
+    padding: 15px;
+    border-radius: 10px;
+    color: red;
+}
