@@ -3,121 +3,367 @@ const express = require("express");
 const fetch = require("node-fetch");
 require("dotenv").config();
 
-// create the express server
+
+// create express server
 const app = express();
 
-// server port number
+
+// port
 const PORT = process.env.PORT || 3000;
 
-// set template engine
+
+// view engine
 app.set("view engine", "ejs");
 
+
+// static files
 app.use(express.static("public"));
 
-// needed to parse html data for POST request
+
+// parse data
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 
+
+
+// function to wait
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+
+
+
+
+// check API until finished
+async function checkConversion(videoId) {
+
+
+    // maximum 10 checks
+    for(let i = 0; i < 10; i++) {
+
+
+        const response = await fetch(
+
+            `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
+
+            {
+                method:"GET",
+
+                headers:{
+
+                    "x-rapidapi-key": process.env.API_KEY,
+
+                    "x-rapidapi-host": process.env.API_HOST
+
+                }
+            }
+
+        );
+
+
+
+        const data = await response.json();
+
+
+
+        console.log("API RESPONSE:", data);
+
+
+
+
+        // finished
+        if(data.status === "ok") {
+
+            return data;
+
+        }
+
+
+
+
+        // still converting
+        if(data.status === "processing") {
+
+
+            console.log(
+                `Processing... attempt ${i + 1}/10`
+            );
+
+
+            await wait(3000);
+
+
+        }
+
+
+
+
+        // unknown error
+        else {
+
+            return data;
+
+        }
+
+
+
+    }
+
+
+
+    return {
+
+        status:"error",
+
+        message:"Conversion is taking too long. Please try again."
+
+    };
+
+
+}
+
+
+
+
+
+
+
+
 // home page
-app.get("/", (req, res) => {
-    res.render("index.ejs");
+app.get("/", (req,res)=>{
+
+
+    res.render("index",{
+
+        success:false,
+
+        message:"",
+
+        song_title:"",
+
+        song_link:""
+
+    });
+
+
 });
+
+
+
+
+
+
+
 
 
 // convert route
-app.post("/convert-mp3", async (req, res) => {
+app.post("/convert-mp3", async(req,res)=>{
+
 
     let videoId = req.body.videoID;
 
-    // check empty input
-    if (
-        videoId === undefined ||
-        videoId === "" ||
-        videoId === null
-    ) {
-        return res.render("index", {
-            success: false,
-            message: "Please enter a YouTube ID or URL"
+
+
+    if(!videoId){
+
+
+        return res.render("index",{
+
+            success:false,
+
+            message:"Please enter a YouTube URL or ID",
+
+            song_title:"",
+
+            song_link:""
+
         });
+
+
     }
 
 
-    // extract ID if user entered a YouTube link
-    if (videoId.includes("youtube.com") || videoId.includes("youtu.be")) {
 
-        try {
+
+
+
+    // extract ID from URL
+    if(
+        videoId.includes("youtube.com") ||
+        videoId.includes("youtu.be")
+    ){
+
+
+        try{
+
 
             const url = new URL(videoId);
 
-            // youtube.com/watch?v=ID
-            if (url.hostname.includes("youtube.com")) {
+
+
+            if(url.hostname.includes("youtube.com")){
+
 
                 videoId = url.searchParams.get("v");
 
+
             }
 
-            // youtu.be/ID
-            else if (url.hostname.includes("youtu.be")) {
+
+            else if(url.hostname.includes("youtu.be")){
+
 
                 videoId = url.pathname.substring(1);
 
+
             }
 
-        } catch(error) {
 
-            return res.render("index", {
+
+        }
+
+        catch(error){
+
+
+            return res.render("index",{
+
                 success:false,
-                message:"Invalid YouTube URL"
+
+                message:"Invalid YouTube URL",
+
+                song_title:"",
+
+                song_link:""
+
             });
 
+
         }
+
+
     }
 
 
-    // call RapidAPI
-    const fetchAPI = await fetch(
-        `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
-        {
-            method:"GET",
-            headers:{
-                "x-rapidapi-key": process.env.API_KEY,
-                "x-rapidapi-host": process.env.API_HOST
-            }
+
+
+
+
+
+    try{
+
+
+        const fetchResponse = await checkConversion(videoId);
+
+
+
+
+        if(fetchResponse.status === "ok"){
+
+
+            return res.render("index",{
+
+
+                success:true,
+
+
+                song_title:fetchResponse.title,
+
+
+                song_link:fetchResponse.link,
+
+
+                message:""
+
+
+            });
+
+
+
         }
-    );
 
 
-    const fetchResponse = await fetchAPI.json();
 
-    console.log(fetchResponse);
+        else{
 
 
-    if(fetchResponse.status === "ok") {
+            return res.render("index",{
 
-        return res.render("index", {
-            success:true,
-            song_title:fetchResponse.title,
-            song_link:fetchResponse.link
-        });
+
+                success:false,
+
+
+                message:
+                fetchResponse.message ||
+                "Conversion failed",
+
+
+                song_title:"",
+
+
+                song_link:""
+
+
+            });
+
+
+
+        }
+
+
 
     }
 
-    else {
 
-        return res.render("index", {
+    catch(error){
+
+
+        console.log(error);
+
+
+
+        return res.render("index",{
+
+
             success:false,
-            message:fetchResponse.message
+
+
+            message:"Server error. Please try again.",
+
+
+            song_title:"",
+
+
+            song_link:""
+
+
         });
 
+
+
     }
+
+
+
 
 });
 
 
-// start the server
-app.listen(PORT, () => {
 
-    console.log(`server started on port ${PORT}`);
+
+
+
+
+
+
+// start server
+app.listen(PORT,()=>{
+
+
+    console.log(
+        `server started on port ${PORT}`
+    );
+
 
 });
