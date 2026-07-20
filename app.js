@@ -1,111 +1,292 @@
-// required packages
 const express = require("express");
 const fetch = require("node-fetch");
 require("dotenv").config();
 
 
-// create express server
 const app = express();
 
 
-// port
 const PORT = process.env.PORT || 3000;
 
 
-// view engine
-app.set("view engine", "ejs");
+
+app.set("view engine","ejs");
 
 
-// static files
 app.use(express.static("public"));
 
 
-// parse data
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({
+    extended:true
+}));
+
 app.use(express.json());
 
 
 
 
-// function to wait
-function wait(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+
+function wait(ms){
+
+    return new Promise(resolve=>setTimeout(resolve,ms));
+
 }
 
 
 
 
 
-// check API until finished
-async function checkConversion(videoId) {
 
 
-    // maximum 10 checks
-    for(let i = 0; i < 10; i++) {
+async function convertVideo(videoId){
 
 
-        const response = await fetch(
 
-            `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
+    const MAX_TIME = 10 * 60 * 1000; // 10 minutes
 
-            {
-                method:"GET",
 
-                headers:{
+    const startTime = Date.now();
 
-                    "x-rapidapi-key": process.env.API_KEY,
 
-                    "x-rapidapi-host": process.env.API_HOST
+    let attempts = 0;
 
-                }
-            }
 
+
+    while(Date.now() - startTime < MAX_TIME){
+
+
+
+        attempts++;
+
+
+        const elapsed = Math.floor(
+            (Date.now()-startTime)/1000
         );
 
 
 
-        const data = await response.json();
-
-
-
-        console.log("API RESPONSE:", data);
-
-
-
-
-        // finished
-        if(data.status === "ok") {
-
-            return data;
-
-        }
+        console.log(
+            `Attempt ${attempts} | ${elapsed}s elapsed`
+        );
 
 
 
 
-        // still converting
-        if(data.status === "processing") {
+        const controller = new AbortController();
 
 
-            console.log(
-                `Processing... attempt ${i + 1}/10`
+
+        const timeout = setTimeout(()=>{
+
+            controller.abort();
+
+        },30000);
+
+
+
+
+
+
+
+        try{
+
+
+            const response = await fetch(
+
+
+                `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
+
+                {
+
+
+                    method:"GET",
+
+
+                    headers:{
+
+
+                        "x-rapidapi-key":
+                        process.env.API_KEY,
+
+
+                        "x-rapidapi-host":
+                        process.env.API_HOST
+
+
+                    },
+
+
+                    signal:controller.signal
+
+
+                }
+
+
             );
 
 
-            await wait(3000);
+
+            clearTimeout(timeout);
+
+
+
+
+            const data = await response.json();
+
+
+
+
+            console.log(
+                "API:",
+                data.status,
+                "|",
+                data.msg || "",
+                "|",
+                data.progress || 0,
+                "%"
+            );
+
+
+
+
+
+
+
+
+            // DONE
+
+            if(
+                data.status==="ok" &&
+                data.link
+            ){
+
+
+                return data;
+
+
+            }
+
+
+
+
+
+
+
+
+
+            // API says processing
+
+            if(
+                data.status==="processing"
+            ){
+
+
+                console.log(
+                    "Still converting..."
+                );
+
+
+                await wait(5000);
+
+
+                continue;
+
+
+            }
+
+
+
+
+
+
+
+
+            // FAILED
+
+            if(
+                data.status==="fail"
+            ){
+
+
+
+                console.log(
+                    "Temporary failure:",
+                    data.msg
+                );
+
+
+
+                // permanent errors
+
+                if(
+                    data.msg &&
+                    (
+                        data.msg.includes("Long audio") ||
+                        data.msg.includes("Invalid") ||
+                        data.msg.includes("not available")
+                    )
+                ){
+
+
+                    return {
+
+                        status:"error",
+
+                        message:data.msg
+
+                    };
+
+
+                }
+
+
+
+
+                await wait(5000);
+
+
+                continue;
+
+
+            }
+
+
+
+
+
+
+
+
+
+            await wait(5000);
+
 
 
         }
 
 
 
+        catch(error){
 
-        // unknown error
-        else {
 
-            return data;
+
+            clearTimeout(timeout);
+
+
+
+            console.log(
+                "REQUEST ERROR:",
+                error.message
+            );
+
+
+
+            await wait(5000);
+
 
         }
+
+
 
 
 
@@ -113,13 +294,19 @@ async function checkConversion(videoId) {
 
 
 
+
+
     return {
+
 
         status:"error",
 
-        message:"Conversion is taking too long. Please try again."
+        message:
+        "Conversion timed out after 10 minutes"
+
 
     };
+
 
 
 }
@@ -131,8 +318,77 @@ async function checkConversion(videoId) {
 
 
 
-// home page
-app.get("/", (req,res)=>{
+
+function extractVideoId(input){
+
+
+
+    try{
+
+
+        if(
+            input.includes("youtube.com")
+        ){
+
+
+            const url = new URL(input);
+
+
+            return url.searchParams.get("v");
+
+
+        }
+
+
+
+
+
+        if(
+            input.includes("youtu.be")
+        ){
+
+
+            const url = new URL(input);
+
+
+            return url.pathname.substring(1);
+
+
+        }
+
+
+
+
+
+        return input.trim();
+
+
+
+    }
+
+
+
+    catch{
+
+
+        return null;
+
+
+    }
+
+
+
+}
+
+
+
+
+
+
+
+
+
+app.get("/",(req,res)=>{
 
 
     res.render("index",{
@@ -158,11 +414,13 @@ app.get("/", (req,res)=>{
 
 
 
-// convert route
-app.post("/convert-mp3", async(req,res)=>{
+app.post("/convert-mp3",async(req,res)=>{
 
 
-    let videoId = req.body.videoID;
+
+    let videoId=req.body.videoID;
+
+
 
 
 
@@ -173,7 +431,8 @@ app.post("/convert-mp3", async(req,res)=>{
 
             success:false,
 
-            message:"Please enter a YouTube URL or ID",
+            message:
+            "Please enter a YouTube URL or ID",
 
             song_title:"",
 
@@ -188,62 +447,40 @@ app.post("/convert-mp3", async(req,res)=>{
 
 
 
+    videoId=extractVideoId(videoId);
 
-    // extract ID from URL
+
+
+
+
     if(
-        videoId.includes("youtube.com") ||
-        videoId.includes("youtu.be")
+        !videoId ||
+        !/^[a-zA-Z0-9_-]{11}$/.test(videoId)
     ){
 
 
-        try{
+        return res.render("index",{
 
 
-            const url = new URL(videoId);
+            success:false,
 
 
-
-            if(url.hostname.includes("youtube.com")){
-
-
-                videoId = url.searchParams.get("v");
+            message:
+            "Invalid YouTube video ID",
 
 
-            }
+            song_title:"",
 
 
-            else if(url.hostname.includes("youtu.be")){
+            song_link:""
 
 
-                videoId = url.pathname.substring(1);
-
-
-            }
-
-
-
-        }
-
-        catch(error){
-
-
-            return res.render("index",{
-
-                success:false,
-
-                message:"Invalid YouTube URL",
-
-                song_title:"",
-
-                song_link:""
-
-            });
-
-
-        }
+        });
 
 
     }
+
+
 
 
 
@@ -254,72 +491,93 @@ app.post("/convert-mp3", async(req,res)=>{
     try{
 
 
-        const fetchResponse = await checkConversion(videoId);
+        const result =
+        await convertVideo(videoId);
 
 
 
 
-        if(fetchResponse.status === "ok"){
+        console.log(
+            "FINAL RESULT:",
+            result
+        );
+
+
+
+
+
+
+
+
+        if(
+            result.status==="ok" &&
+            result.link
+        ){
+
 
 
             return res.render("index",{
-
 
                 success:true,
 
+                message:"",
 
-                song_title:fetchResponse.title,
+                song_title:
+                result.title,
 
-
-                song_link:fetchResponse.link,
-
-
-                message:""
+                song_link:
+                result.link
 
 
             });
-
 
 
         }
 
 
 
-        else{
-
-
-            return res.render("index",{
-
-
-                success:false,
-
-
-                message:
-                fetchResponse.message ||
-                "Conversion failed",
-
-
-                song_title:"",
-
-
-                song_link:""
-
-
-            });
 
 
 
-        }
+
+        return res.render("index",{
+
+
+
+            success:false,
+
+
+            message:
+            result.message ||
+            "Conversion failed",
+
+
+            song_title:"",
+
+
+            song_link:""
+
+
+
+        });
+
+
 
 
 
     }
 
 
+
+
     catch(error){
 
 
-        console.log(error);
+
+        console.log(
+            "SERVER ERROR:",
+            error
+        );
 
 
 
@@ -329,13 +587,15 @@ app.post("/convert-mp3", async(req,res)=>{
             success:false,
 
 
-            message:"Server error. Please try again.",
+            message:
+            "Server error",
 
 
             song_title:"",
 
 
             song_link:""
+
 
 
         });
@@ -356,13 +616,11 @@ app.post("/convert-mp3", async(req,res)=>{
 
 
 
-
-// start server
 app.listen(PORT,()=>{
 
 
     console.log(
-        `server started on port ${PORT}`
+        `Server running on port ${PORT}`
     );
 
 
